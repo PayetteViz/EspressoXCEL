@@ -1,0 +1,888 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>EspressoXCEL</title>
+
+  <link rel="icon" type="image/svg+xml"
+    href='data:image/svg+xml,
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+      <defs>
+        <linearGradient id="g" x1="0" x2="1">
+          <stop offset="0" stop-color="%2394bfff"/>
+          <stop offset="1" stop-color="%23ffffff"/>
+        </linearGradient>
+      </defs>
+      <rect width="64" height="64" rx="14" fill="%230a0d14"/>
+      <path d="M18 26h26v16c0 7-5 12-12 12H30c-7 0-12-5-12-12V26Z" fill="none" stroke="url(%23g)" stroke-width="4"/>
+      <path d="M44 29h5c4 0 7 3 7 7s-3 7-7 7h-5" fill="none" stroke="url(%23g)" stroke-width="4" stroke-linecap="round"/>
+      <path d="M26 14c0 4 4 4 4 8s-4 4-4 8" fill="none" stroke="%2394bfff" stroke-width="4" stroke-linecap="round"/>
+      <path d="M34 14c0 4 4 4 4 8s-4 4-4 8" fill="none" stroke="%2394bfff" stroke-width="4" stroke-linecap="round"/>
+    </svg>'>
+
+  <!-- Put xlsx.full.min.js next to this index.html -->
+  <script src="./xlsx.full.min.js"></script>
+
+  <style>
+    :root{
+      --bg0:#07080d;
+      --bg1:#0a0d14;
+      --line: rgba(255,255,255,0.11);
+      --text: rgba(255,255,255,0.92);
+      --muted: rgba(255,255,255,0.62);
+      --accent: rgba(148, 191, 255, 0.95);
+      --good: rgba(121,255,167,0.95);
+      --warn: rgba(255,212,121,0.95);
+      --bad:  rgba(255,107,107,0.95);
+
+      /* Poster controls (tweak freely) */
+      --posterTitleW: 1080px;
+      --posterCatW: 1080px;
+      --posterOpacity: 0.72;     /* lower = more blended */
+    }
+
+    *{ box-sizing:border-box; }
+
+    body{
+      margin:0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+      color: var(--text);
+      min-height:100vh;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding: 28px;
+
+      background:
+        radial-gradient(1000px 700px at 20% 10%, rgba(148,191,255,0.20), transparent 60%),
+        radial-gradient(900px 600px at 80% 40%, rgba(121,255,167,0.08), transparent 60%),
+        radial-gradient(900px 600px at 20% 90%, rgba(255,212,121,0.08), transparent 60%),
+        linear-gradient(180deg, var(--bg0), var(--bg1));
+      position: relative;
+      overflow-x:hidden;
+    }
+
+    /* ===== Poster overlay (UNDER glass card, ABOVE background) ===== */
+    .posterLayer{
+      position: fixed;
+      inset: 0;
+      z-index: 0;               /* background + poster share 0, but wrap is 2 */
+      pointer-events: none;
+      user-select: none;
+      overflow: hidden;
+    }
+
+    /* Title (top-left) */
+    .posterTitle{
+      position: absolute;
+      left: 22px;
+      top: 18px;
+      width: var(--posterTitleW);
+      height: auto;
+
+      mix-blend-mode: screen;
+      opacity: 0.70;
+      filter: brightness(1.08) saturate(1.06) contrast(1.06);
+
+      /* subtle depth */
+      transform: rotate(-1deg);
+    }
+
+    /* Cat (bottom-right) */
+    .posterCat{
+      position: absolute;
+      right: 12px;
+      bottom: -10px;
+      width: var(--posterCatW);
+      height: auto;
+
+      opacity: var(--posterOpacity);
+      mix-blend-mode: soft-light; /* key: blend into background */
+      filter: saturate(1.06) contrast(1.06);
+
+      transform: rotate(-0.6deg);
+    }
+
+    /* Fade edges so poster feels embedded (not sticker) */
+    .posterLayer::after{
+      content:"";
+      position:absolute;
+      inset:0;
+      pointer-events:none;
+
+      /* left side stays premium-glowy; right side fades the poster into dark */
+      background:
+        radial-gradient(900px 650px at 22% 18%, rgba(148,191,255,0.14), transparent 60%),
+        radial-gradient(900px 650px at 18% 88%, rgba(255,212,121,0.05), transparent 60%),
+        linear-gradient(
+          90deg,
+          rgba(7,8,13,0.00) 44%,
+          rgba(7,8,13,0.35) 58%,
+          rgba(7,8,13,0.55) 72%,
+          rgba(7,8,13,0.88) 100%
+        );
+    }
+
+    /* ===== Main layout ===== */
+    .wrap{
+      width:min(980px, 100%);
+      display:grid;
+      gap:16px;
+      position: relative;
+      z-index: 2; /* above poster layer */
+    }
+
+    .title{
+      text-align:center;
+      font-size: 24px;
+      font-weight: 850;
+      letter-spacing: .3px;
+      margin: 0;
+    }
+
+    .card{
+      background: linear-gradient(180deg, rgba(255,255,255,0.075), rgba(255,255,255,0.045));
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      padding: 16px;
+      box-shadow: 0 26px 120px rgba(0,0,0,0.55);
+      backdrop-filter: blur(10px);
+    }
+
+    .drop{
+      border-radius: 18px;
+      border: 1px dashed rgba(255,255,255,0.18);
+      background: rgba(0,0,0,0.18);
+      padding: 30px;
+      min-height: 170px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      text-align:center;
+      user-select:none;
+      cursor:pointer;
+      transition: 180ms ease;
+      position: relative;
+      overflow:hidden;
+    }
+    .drop::before{
+      content:"";
+      position:absolute; inset:-2px;
+      background: radial-gradient(700px 200px at 50% 0%, rgba(148,191,255,0.18), transparent 60%);
+      pointer-events:none;
+    }
+    .drop.dragover{
+      border-color: rgba(148,191,255,0.75);
+      box-shadow: 0 0 0 4px rgba(148,191,255,0.12) inset;
+      background: rgba(148,191,255,0.06);
+    }
+    .dropInner{ position: relative; }
+    .dropTitle{
+      font-weight: 800;
+      font-size: 14px;
+      letter-spacing: .2px;
+    }
+    .dropSub{
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .actions{
+      display:flex;
+      gap:10px;
+      margin-top: 12px;
+      flex-wrap:wrap;
+      justify-content:center;
+    }
+    button{
+      appearance:none;
+      border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 14px;
+      padding: 10px 16px;
+      background: rgba(255,255,255,0.07);
+      color: var(--text);
+      font-weight: 780;
+      font-size: 13px;
+      cursor:pointer;
+      transition: 160ms ease;
+    }
+    button:hover{ background: rgba(255,255,255,0.11); transform: translateY(-1px); }
+    button.primary{
+      border-color: rgba(148,191,255,0.45);
+      background: rgba(148,191,255,0.16);
+    }
+    button.primary:hover{ background: rgba(148,191,255,0.24); }
+    button:disabled{ opacity: .5; cursor:not-allowed; transform:none; }
+
+    input[type="file"]{ display:none; }
+
+    .projects{
+      margin-top: 12px;
+      display:none;
+      gap:10px;
+    }
+    .proj{
+      border: 1px solid rgba(255,255,255,0.10);
+      background: rgba(255,255,255,0.04);
+      border-radius: 16px;
+      padding: 12px 12px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap: 12px;
+    }
+    .projLeft{
+      min-width: 0;
+      display:flex;
+      flex-direction:column;
+      gap: 4px;
+    }
+    .projName{
+      font-weight: 820;
+      font-size: 13px;
+      letter-spacing:.2px;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      white-space:nowrap;
+      max-width: 520px;
+    }
+    .projFiles{
+      color: var(--muted);
+      font-size: 12px;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      white-space:nowrap;
+      max-width: 520px;
+    }
+
+    .chips{
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+      justify-content:flex-end;
+    }
+    .chip{
+      font-size: 11px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.14);
+      background: rgba(255,255,255,0.05);
+      color: var(--muted);
+    }
+    .chip.good{ border-color: rgba(121,255,167,0.26); color: var(--good); }
+    .chip.warn{ border-color: rgba(255,212,121,0.26); color: var(--warn); }
+    .chip.bad{  border-color: rgba(255,107,107,0.26); color: var(--bad); }
+
+    .notes{
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.55;
+      margin: 0;
+    }
+    .notes b{ color: var(--text); }
+    .notes ul{ margin: 8px 0 0 18px; }
+
+    .status{
+      display:none;
+      margin-top: 10px;
+      font-size: 12px;
+      color: var(--muted);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      white-space: pre-wrap;
+      background: rgba(0,0,0,0.16);
+      border: 1px solid rgba(255,255,255,0.10);
+      border-radius: 14px;
+      padding: 10px 12px;
+      max-height: 240px;
+      overflow:auto;
+    }
+
+    /* Responsive poster scaling */
+    @media (max-width: 900px){
+      :root{
+        --posterTitleW: 280px;
+        --posterCatW: 400px;
+        --posterOpacity: 0.66;
+      }
+      .posterTitle{ left: 14px; top: 12px; }
+      .posterCat{ right: 10px; bottom: -14px; }
+    }
+    @media (max-width: 520px){
+      :root{
+        --posterTitleW: 220px;
+        --posterCatW: 320px;
+        --posterOpacity: 0.62;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="posterLayer" aria-hidden="true">
+    <img class="posterTitle" src="./espresso-title.png" alt="" />
+    <img class="posterCat" src="./espresso-cat.png" alt="" />
+  </div>
+  <div class="wrap">
+    <div class="brand">
+      <div class="brandInner">
+        <div class="brand">
+          <div class="brandInner">
+            <h1 class="title">EspressoXCEL</h1>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="card">
+      
+      <div id="drop" class="drop" role="button" tabindex="0" aria-label="Drop Excel files here or click to choose">
+        <div class="dropInner">
+          <div class="dropTitle">Drop Excel files</div>
+          <div class="dropSub">…or click to choose</div>
+        </div>
+      </div>
+
+      <input id="fileInput" type="file" multiple accept=".xlsx,.xls" />
+
+      <div class="actions">
+        <button id="generate" class="primary" disabled>Generate</button>
+        <button id="reset" disabled>Reset</button>
+      </div>
+
+      <div id="projects" class="projects"></div>
+      <div id="status" class="status"></div>
+    </div>
+
+    <div class="notes">
+      <b>Notes:</b>
+      <ul>
+        <li>Budget: reads <b>Summary</b> sheet only (Gross Fee metrics + phase tables + subcontractor breakdown).</li>
+        <li>Labor: sums <b>Total Hours</b> by <b>Phase</b> (excluding “Employee Total” rows).</li>
+        <li>OER: reads the <b>Grand Total</b> row.</li>
+      </ul>
+    </div>
+  </div>
+
+<script>
+(() => {
+  const drop = document.getElementById('drop');
+  const fileInput = document.getElementById('fileInput');
+  const btnGen = document.getElementById('generate');
+  const btnReset = document.getElementById('reset');
+  const projectsBox = document.getElementById('projects');
+  const status = document.getElementById('status');
+
+  /** @type {File[]} */
+  let files = [];
+
+  function showStatus(msg) {
+    status.style.display = 'block';
+    status.textContent += msg + "\n";
+    status.scrollTop = status.scrollHeight;
+  }
+  function clearStatus() {
+    status.textContent = "";
+    status.style.display = 'none';
+  }
+
+  // Accept: "<Project> Budget" / "<Project> Labor" / "<Project> OER" / "<Project> Project Data"
+  // Also accept: Project_Data / ProjectData
+  function parseName(name) {
+    const base = name.replace(/\.[^.]+$/, '').trim();
+
+    const re = /^(.*)\s+(Budget|Labor|OER|Project[\s_]?Data)$/i;
+    const m = base.match(re);
+    if (!m) return { ok:false, project:null, kind:null };
+
+    const project = m[1].trim();
+    const rawKind = m[2].toLowerCase().replace(/[_\s]+/g, ' ').trim();
+
+    let kind = null;
+    if (rawKind === 'budget') kind = 'BUDGET';
+    else if (rawKind === 'labor') kind = 'LABOR';
+    else if (rawKind === 'oer') kind = 'OER';
+    else if (rawKind === 'project data') kind = 'PROJECT_DATA';
+
+    return { ok: !!kind, project, kind };
+  }
+
+  function keyOf(f){ return `${f.name}__${f.size}__${f.lastModified}`; }
+
+  function addFiles(incoming) {
+    const existing = new Set(files.map(keyOf));
+    for (const f of incoming) if (!existing.has(keyOf(f))) files.push(f);
+
+    btnReset.disabled = files.length === 0;
+    renderProjects();
+    btnGen.disabled = !hasAnyCompleteProject(files);
+  }
+
+  function groupByProject(fileArr){
+    const byProject = new Map(); // project -> {BUDGET, LABOR, OER, PROJECT_DATA, invalid:[]}
+    for (const f of fileArr) {
+      const p = parseName(f.name);
+      if (!p.ok) {
+        const k = "__INVALID__";
+        if (!byProject.has(k)) byProject.set(k, { invalid:[] });
+        byProject.get(k).invalid.push(f);
+        continue;
+      }
+      if (!byProject.has(p.project)) {
+        byProject.set(p.project, { BUDGET:null, LABOR:null, OER:null, PROJECT_DATA:null, invalid:[] });
+      }
+      byProject.get(p.project)[p.kind] = f;
+    }
+    return byProject;
+  }
+
+  function hasAnyCompleteProject(fileArr) {
+    const byProject = groupByProject(fileArr);
+    for (const [proj, set] of byProject.entries()) {
+      if (proj === "__INVALID__") continue;
+      if (set.BUDGET && set.LABOR && set.OER && set.PROJECT_DATA) return true;
+    }
+    return false;
+  }
+
+  function esc(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c])); }
+
+  function renderProjects(){
+    const byProject = groupByProject(files);
+    const keys = Array.from(byProject.keys()).sort((a,b) => {
+      if (a === "__INVALID__") return 1;
+      if (b === "__INVALID__") return -1;
+      return a.localeCompare(b);
+    });
+
+    if (files.length === 0) {
+      projectsBox.style.display = "none";
+      projectsBox.innerHTML = "";
+      return;
+    }
+
+    projectsBox.style.display = "grid";
+    projectsBox.innerHTML = "";
+
+    for (const proj of keys) {
+      const set = byProject.get(proj);
+
+      const row = document.createElement('div');
+      row.className = "proj";
+
+      const left = document.createElement('div');
+      left.className = "projLeft";
+
+      const name = document.createElement('div');
+      name.className = "projName";
+      name.textContent = (proj === "__INVALID__") ? "Unrecognized filenames" : proj;
+
+      const filesLine = document.createElement('div');
+      filesLine.className = "projFiles";
+
+      if (proj === "__INVALID__") {
+        filesLine.textContent = (set.invalid || []).map(f => f.name).join(" • ");
+      } else {
+        const present = [];
+        if (set.BUDGET) present.push(set.BUDGET.name);
+        if (set.LABOR) present.push(set.LABOR.name);
+        if (set.OER) present.push(set.OER.name);
+        if (set.PROJECT_DATA) present.push(set.PROJECT_DATA.name);
+        filesLine.textContent = present.join(" • ");
+      }
+
+      left.appendChild(name);
+      left.appendChild(filesLine);
+
+      const right = document.createElement('div');
+      right.className = "chips";
+
+      if (proj === "__INVALID__") {
+        right.appendChild(makeChip("rename required", "bad"));
+      } else {
+        const complete = !!(set.BUDGET && set.LABOR && set.OER && set.PROJECT_DATA);
+        right.appendChild(makeChip(complete ? "complete ✓" : "incomplete", complete ? "good" : "warn"));
+        right.appendChild(makeChip("Budget", set.BUDGET ? "good" : "warn"));
+        right.appendChild(makeChip("Labor", set.LABOR ? "good" : "warn"));
+        right.appendChild(makeChip("OER", set.OER ? "good" : "warn"));
+        right.appendChild(makeChip("Project Data", set.PROJECT_DATA ? "good" : "warn"));
+      }
+
+      row.appendChild(left);
+      row.appendChild(right);
+      projectsBox.appendChild(row);
+    }
+
+    function makeChip(label, cls){
+      const s = document.createElement('span');
+      s.className = "chip " + cls;
+      s.textContent = label;
+      return s;
+    }
+  }
+
+  // UI wiring
+  drop.addEventListener('click', () => fileInput.click());
+  drop.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') fileInput.click();
+  });
+
+  drop.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    drop.classList.add('dragover');
+  });
+  drop.addEventListener('dragleave', () => drop.classList.remove('dragover'));
+  drop.addEventListener('drop', (e) => {
+    e.preventDefault();
+    drop.classList.remove('dragover');
+    const incoming = Array.from(e.dataTransfer.files || []).filter(f => /\.xlsx?$/i.test(f.name));
+    if (incoming.length) addFiles(incoming);
+  });
+
+  fileInput.addEventListener('change', () => {
+    const incoming = Array.from(fileInput.files || []).filter(f => /\.xlsx?$/i.test(f.name));
+    if (incoming.length) addFiles(incoming);
+    fileInput.value = "";
+  });
+
+  btnReset.addEventListener('click', () => {
+    files = [];
+    btnGen.disabled = true;
+    btnReset.disabled = true;
+    clearStatus();
+    renderProjects();
+  });
+
+  // ---------- XLSX helpers ----------
+  async function readWorkbook(file) {
+    const buf = await file.arrayBuffer();
+    return XLSX.read(buf, { type: 'array', cellDates: true });
+  }
+
+  function sheetToAOA(wb, sheetName) {
+    const ws = wb.Sheets[sheetName];
+    if (!ws) return null;
+    return XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: true });
+  }
+
+  function findRowIndex(aoa, predicate) {
+    for (let r=0; r<aoa.length; r++) if (predicate(aoa[r], r)) return r;
+    return -1;
+  }
+
+  function normalizeLabel(x){
+    return String(x ?? '')
+      .replace(/\s+/g,' ')
+      .replace(/:$/, '')
+      .trim()
+      .toLowerCase();
+  }
+
+  function lastNumericInRow(row) {
+    for (let i=row.length-1; i>=0; i--) {
+      const x = row[i];
+      if (typeof x === 'number' && isFinite(x)) return x;
+      if (typeof x === 'string' && x.trim() !== '' && isFinite(Number(x.replace(/,/g,'')))) return Number(x.replace(/,/g,''));
+    }
+    return null;
+  }
+
+  function toNumber(x){
+    if (typeof x === 'number' && isFinite(x)) return x;
+    if (typeof x === 'string') {
+      const t = x.replace(/,/g,'').trim();
+      if (t !== '' && isFinite(Number(t))) return Number(t);
+    }
+    return null;
+  }
+
+  function extractProjectNumber(projectCell){
+    const s = String(projectCell ?? '').trim();
+    const m = s.match(/^([0-9]+(?:\.[0-9]+)?)\b/);
+    return m ? m[1] : s;
+  }
+
+  // ---------- Extractors ----------
+  function extractFromBudget(wb) {
+    const aoa = sheetToAOA(wb, "Summary");
+    if (!aoa) throw new Error('Budget: missing "Summary" sheet.');
+
+    const metrics = [
+      { label: "Current Project Gross Fee", match: "current project gross fee" },
+      { label: "Direct Expense Budget", match: "direct expense budget" },
+      { label: "Payette Net Labor Fee per Greensheet", match: "payette net labor fee per greensheet" }
+    ];
+
+    const grossFeeRows = [["Metric","Value"]];
+    for (const m of metrics) {
+      const r = findRowIndex(aoa, (row) => normalizeLabel(row?.[0]) === m.match);
+      grossFeeRows.push([m.label, r < 0 ? null : lastNumericInRow(aoa[r])]);
+    }
+
+    const headerRowIdx = findRowIndex(aoa, (row) =>
+      normalizeLabel(row?.[0]) === "type" && row.some(c => normalizeLabel(c) === "totals")
+    );
+    if (headerRowIdx < 0) throw new Error("Budget: cannot find phase header row (starts with 'Type').");
+
+    const header = aoa[headerRowIdx].map(x => (x == null ? null : String(x).trim()));
+    const phaseCols = [];
+    for (let c=1; c<header.length; c++) {
+      const h = header[c];
+      if (h == null || String(h).trim() === "") continue;
+      phaseCols.push({ c, phase: String(h).trim() });
+    }
+
+    const feeByPhase = [["Type","Phase","Amount"]];
+    for (const t of ["Total Gross Fees","Subcontractor Fees"]) {
+      const r = findRowIndex(aoa, (row) => String(row?.[0] ?? "").trim() === t);
+      if (r < 0) continue;
+      for (const pc of phaseCols) feeByPhase.push([t, pc.phase, toNumber(aoa[r][pc.c]) ?? 0]);
+    }
+
+    const subHeaderIdx = findRowIndex(aoa, (row) => normalizeLabel(row?.[0]) === "subcontractor name");
+    if (subHeaderIdx < 0) throw new Error("Budget: cannot find subcontractor table header ('Subcontractor Name').");
+
+    const subHeader = aoa[subHeaderIdx].map(x => (x == null ? null : String(x).trim()));
+    const subPhaseCols = [];
+    for (let c=1; c<subHeader.length; c++) {
+      const h = subHeader[c];
+      if (h == null || String(h).trim() === "") continue;
+      subPhaseCols.push({ c, phase: String(h).trim() });
+    }
+
+    const subcontractorByPhase = [["Subcontractor","Phase","Amount"]];
+    for (let r=subHeaderIdx+1; r<aoa.length; r++) {
+      const name = String(aoa[r]?.[0] ?? "").trim();
+      if (!name) continue;
+      if (/^legend\b/i.test(name)) break;
+
+      let anyNum = false;
+      for (const pc of subPhaseCols) {
+        const n = toNumber(aoa[r][pc.c]);
+        if (n != null) { anyNum = true; break; }
+      }
+      if (!anyNum) continue;
+
+      for (const pc of subPhaseCols) subcontractorByPhase.push([name, pc.phase, toNumber(aoa[r][pc.c]) ?? 0]);
+    }
+
+    return { grossFeeRows, feeByPhase, subcontractorByPhase };
+  }
+
+  function extractFromLabor(wb) {
+    const sheetName = wb.SheetNames[0];
+    const aoa = sheetToAOA(wb, sheetName);
+    if (!aoa) throw new Error('Labor: cannot read first sheet.');
+
+    const hdrIdx = findRowIndex(aoa, (row) => {
+      const norm = row.map(normalizeLabel);
+      return norm.includes("project") && norm.includes("phase") && norm.includes("total hours");
+    });
+    if (hdrIdx < 0) throw new Error('Labor: cannot find header row with "Project / Phase / Total Hours".');
+
+    const hdr = aoa[hdrIdx].map(x => String(x ?? '').trim());
+    const iProject = hdr.findIndex(x => normalizeLabel(x) === "project");
+    const iPhase = hdr.findIndex(x => normalizeLabel(x) === "phase");
+    const iEmployee = hdr.findIndex(x => normalizeLabel(x) === "employee");
+    const iDate = hdr.findIndex(x => normalizeLabel(x) === "date");
+    const iHours = hdr.findIndex(x => normalizeLabel(x) === "total hours");
+
+    const map = new Map();
+    for (let r=hdrIdx+1; r<aoa.length; r++) {
+      const row = aoa[r];
+      const pCell = row?.[iProject];
+      const phCell = row?.[iPhase];
+      const empCell = iEmployee >= 0 ? row?.[iEmployee] : null;
+      const dateCell = iDate >= 0 ? row?.[iDate] : null;
+      const hCell = row?.[iHours];
+
+      if (pCell == null || String(pCell).trim() === "") continue;
+      if (empCell != null && / total$/i.test(String(empCell).trim())) continue;
+      if (iDate >= 0 && (dateCell == null || String(dateCell).trim() === "")) continue;
+
+      const hours = toNumber(hCell);
+      if (hours == null) continue;
+
+      const projNum = extractProjectNumber(pCell);
+      const phase = String(phCell ?? "").trim();
+      if (!phase) continue;
+
+      const key = projNum + "||" + phase;
+      map.set(key, (map.get(key) || 0) + hours);
+    }
+
+    const rows = [["ProjectNumber","PhaseClean","TotalHours"]];
+    const keys = Array.from(map.keys()).sort((a,b) => a.localeCompare(b));
+    for (const k of keys) {
+      const [projNum, phase] = k.split("||");
+      rows.push([projNum, phase, Math.round(map.get(k) * 2) / 2]);
+    }
+    return rows;
+  }
+
+  function extractFromOER(wb) {
+    const sheetName = wb.SheetNames[0];
+    const aoa = sheetToAOA(wb, sheetName);
+    if (!aoa) throw new Error("OER: cannot read first sheet.");
+
+    const grandIdx = findRowIndex(aoa, (row) => normalizeLabel(row?.[0]) === "grand total");
+    if (grandIdx < 0) throw new Error('OER: cannot find "Grand Total" row.');
+
+    let headerIdx = -1;
+    for (let r = grandIdx; r >= Math.max(0, grandIdx - 6); r--) {
+      const row = aoa[r] || [];
+      const norm = row.map(normalizeLabel);
+      if (norm.includes("hours") && norm.includes("revenue") && norm.includes("labor")) { headerIdx = r; break; }
+    }
+    if (headerIdx < 0) headerIdx = grandIdx - 1;
+
+    const hdr = (aoa[headerIdx] || []).map(x => String(x ?? '').trim());
+    const row = aoa[grandIdx] || [];
+
+    const idx = (k) => hdr.findIndex(x => normalizeLabel(x) === k);
+    const laborIdxs = hdr.map((x,i)=>[normalizeLabel(x),i]).filter(([n])=>n==="labor").map(([,i])=>i);
+
+    const outHeader = ["Hours","GrossRevenue","ProjectConsExp","NetRev","Labor","OH","ProfitLoss","PctProfit","NetMult","PctEACLabor"];
+    const outRow = [
+      toNumber(row[idx("hours")]) ?? 0,
+      toNumber(row[idx("revenue")]) ?? 0,
+      toNumber(row[idx("cons/exp")]) ?? 0,
+      toNumber(row[idx("rev")]) ?? 0,
+      toNumber(row[idx("labor")]) ?? 0,
+      toNumber(row[idx("oh")]) ?? 0,
+      toNumber(row[idx("loss")]) ?? 0,
+      toNumber(row[idx("profit")]) ?? 0,
+      toNumber(row[idx("mult")]) ?? 0,
+      (laborIdxs.length >= 2 ? (toNumber(row[laborIdxs[1]]) ?? 0) : 0)
+    ];
+
+    return [outHeader, outRow];
+  }
+
+  // New: Project_Data extraction (match your example: 2-column key/value, repeated Lab Types + Lab Use)
+  function extractFromProjectData(wb) {
+    const preferred = wb.SheetNames.includes("Project_Data") ? "Project_Data" : wb.SheetNames[0];
+    const aoa = sheetToAOA(wb, preferred);
+    if (!aoa) throw new Error("Project Data: cannot read sheet.");
+
+    function findLabelRow(label){
+      const target = normalizeLabel(label);
+      return findRowIndex(aoa, (row) => normalizeLabel(row?.[0]) === target);
+    }
+
+    function getValue(label){
+      const r = findLabelRow(label);
+      if (r < 0) return null;
+      return aoa[r]?.[1] ?? null;
+    }
+
+    function getList(label){
+      const r = findLabelRow(label);
+      if (r < 0) return [];
+      const out = [];
+      const first = aoa[r]?.[1];
+      if (first != null && String(first).trim() !== "") out.push(first);
+
+      for (let i=r+1; i<aoa.length; i++) {
+        const k = aoa[i]?.[0];
+        const v = aoa[i]?.[1];
+
+        const kHas = k != null && String(k).trim() !== "";
+        if (kHas) break; // next section begins
+
+        if (v != null && String(v).trim() !== "") out.push(v);
+      }
+      return out;
+    }
+
+    // EXACT order as your example output
+    const rows = [];
+    rows.push(["Project Name", getValue("Project Name")]);
+    rows.push(["Institution Name", getValue("Institution Name")]);
+    rows.push(["Primary Client Type", getValue("Primary Client Type")]);
+    rows.push(["Primary Project ID", getValue("Primary Project ID")]);
+    rows.push(["Construction Type", getValue("Construction Type")]);
+    rows.push(["Total Construction Cost (Actual)", getValue("Total Construction Cost (Actual)")]);
+    rows.push(["Award of Project Date", getValue("Award of Project Date")]);
+    rows.push(["Year Completed", getValue("Year Completed")]);
+    rows.push(["Site Area", getValue("Site Area")]);
+    rows.push(["GSF: Area of New Construction", getValue("GSF: Area of New Construction")]);
+    rows.push(["GSF: Area of Renovation", getValue("GSF: Area of Renovation")]);
+    rows.push(["GSF: Total Area", getValue("GSF: Total Area")]);
+
+    const labTypes = getList("Lab Types");
+    for (const v of labTypes) rows.push(["Lab Types", v]);
+
+    const labUse = getList("Lab Use");
+    for (const v of labUse) rows.push(["Lab Use", v]);
+
+    // Remove null trailing rows if some fields not present
+    return rows.filter(r => r[0] && (r[1] !== null && String(r[1]).trim() !== ""));
+  }
+
+  function buildOutputWorkbook(project, budgetExtract, laborRows, oerRows, projectDataRows) {
+    const wb = XLSX.utils.book_new();
+
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(budgetExtract.grossFeeRows), "Gross_Fee");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(budgetExtract.feeByPhase), "Fee_ByPhase");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(budgetExtract.subcontractorByPhase), "Subcontractor_ByPhase");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(laborRows), "Labor_PhaseTotals");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(oerRows), "OER_ProjectLines");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(projectDataRows), "Project_Data");
+
+    wb.Props = wb.Props || {};
+    wb.Props.Title = `PowerBI Ready - ${project}`;
+    return wb;
+  }
+
+  // ---------- Generate ----------
+  btnGen.addEventListener('click', async () => {
+    clearStatus();
+    btnGen.disabled = true;
+
+    try {
+      const byProject = groupByProject(files);
+
+      const complete = [];
+      for (const [proj, set] of byProject.entries()) {
+        if (proj === "__INVALID__") continue;
+        if (set.BUDGET && set.LABOR && set.OER && set.PROJECT_DATA) complete.push([proj, set]);
+      }
+      if (!complete.length) {
+        showStatus("No complete project sets found (need Budget + Labor + OER + Project Data).");
+        return;
+      }
+
+      for (const [proj, set] of complete) {
+        const wbBudget = await readWorkbook(set.BUDGET);
+        const wbLabor  = await readWorkbook(set.LABOR);
+        const wbOER    = await readWorkbook(set.OER);
+        const wbPD     = await readWorkbook(set.PROJECT_DATA);
+
+        const budgetExtract = extractFromBudget(wbBudget);
+        const laborRows = extractFromLabor(wbLabor);
+        const oerRows = extractFromOER(wbOER);
+        const projectDataRows = extractFromProjectData(wbPD);
+
+        const outWb = buildOutputWorkbook(proj, budgetExtract, laborRows, oerRows, projectDataRows);
+
+        const safeProj = proj.replace(/[^\w\-]+/g, "_");
+        XLSX.writeFile(outWb, `${safeProj}_powerbi_ready.xlsx`);
+      }
+
+    } catch (err) {
+      console.error(err);
+      showStatus(`ERROR: ${err?.message || String(err)}`);
+    } finally {
+      btnGen.disabled = !hasAnyCompleteProject(files);
+    }
+  });
+
+})();
+</script>
+</body>
+</html>
