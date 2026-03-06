@@ -629,11 +629,20 @@
     if (headerRowIdx < 0) throw new Error("Budget: cannot find phase header row (starts with 'Type').");
 
     const header = aoa[headerRowIdx].map(x => (x == null ? null : String(x).trim()));
+    const SKIP_PHASES = new Set(["totals", "contingency"]);
+    
     const phaseCols = [];
-    for (let c=1; c<header.length; c++) {
+    for (let c = 1; c < header.length; c++) {
       const h = header[c];
       if (h == null || String(h).trim() === "") continue;
-      phaseCols.push({ c, phase: String(h).trim() });
+    
+      const phaseName = String(h).trim();
+      const key = phaseName.toLowerCase();
+    
+      // ✅ skip Totals / Contingency columns
+      if (SKIP_PHASES.has(key)) continue;
+    
+      phaseCols.push({ c, phase: phaseName });
     }
 
     const feeByPhase = [["Type","Phase","Amount"]];
@@ -647,11 +656,20 @@
     if (subHeaderIdx < 0) throw new Error("Budget: cannot find subcontractor table header ('Subcontractor Name').");
 
     const subHeader = aoa[subHeaderIdx].map(x => (x == null ? null : String(x).trim()));
+    const SKIP_SUB_PHASES = new Set(["totals", "contingency"]);
+    
     const subPhaseCols = [];
-    for (let c=1; c<subHeader.length; c++) {
+    for (let c = 1; c < subHeader.length; c++) {
       const h = subHeader[c];
       if (h == null || String(h).trim() === "") continue;
-      subPhaseCols.push({ c, phase: String(h).trim() });
+    
+      const phaseName = String(h).trim();
+      const key = phaseName.toLowerCase();
+    
+      // ✅ skip Totals / Contingency columns
+      if (SKIP_SUB_PHASES.has(key)) continue;
+    
+      subPhaseCols.push({ c, phase: phaseName });
     }
 
     const subcontractorByPhase = [["Subcontractor","Phase","Amount"]];
@@ -719,7 +737,7 @@
     const keys = Array.from(map.keys()).sort((a,b) => a.localeCompare(b));
     for (const k of keys) {
       const [projNum, phase] = k.split("||");
-      rows.push([projNum, phase, Math.round(map.get(k) * 2) / 2]);
+      rows.push([String(projNum), phase, Math.round(map.get(k) * 2) / 2]);
     }
     return rows;
   }
@@ -790,16 +808,14 @@
       for (let i=r+1; i<aoa.length; i++) {
         const k = aoa[i]?.[0];
         const v = aoa[i]?.[1];
-  
         const kHas = k != null && String(k).trim() !== "";
-        if (kHas) break; // next section begins
-  
+        if (kHas) break;
         if (v != null && String(v).trim() !== "") out.push(v);
       }
       return out;
     }
   
-    // ✅ convert "12,345 SF" / "12345sf" / "12,345  sf" -> 12345 (number)
+    // "12,345 SF" -> 12345
     function parseSF(v){
       if (v == null) return null;
       if (typeof v === "number" && isFinite(v)) return v;
@@ -807,44 +823,72 @@
       let s = String(v).trim();
       if (!s) return null;
   
-      // remove commas
       s = s.replace(/,/g, "");
-  
-      // remove trailing unit like " SF" / "sf" (only at the end)
       s = s.replace(/\s*sf\s*$/i, "");
-  
-      // if there are any other trailing non-numeric chars, strip them cautiously
       s = s.replace(/[^\d.\-]+$/g, "").trim();
   
       const n = Number(s);
       return Number.isFinite(n) ? n : null;
     }
   
-    // ✅ strongly recommended: add a header so Project_Data is a proper table
-    const rows = [["Key","Value"]];
+    // "14,600,000" -> 14600000 ; numbers pass through ; non-numbers -> null
+    function parseNumberLoose(v){
+      if (v == null) return null;
+      if (typeof v === "number" && isFinite(v)) return v;
+      const s = String(v).replace(/,/g, "").trim();
+      const n = Number(s);
+      return Number.isFinite(n) ? n : null;
+    }
   
-    rows.push(["Project Name", getValue("Project Name")]);
-    rows.push(["Institution Name", getValue("Institution Name")]);
-    rows.push(["Primary Client Type", getValue("Primary Client Type")]);
-    rows.push(["Primary Project ID", getValue("Primary Project ID")]);
-    rows.push(["Construction Type", getValue("Construction Type")]);
-    rows.push(["Total Construction Cost (Actual)", getValue("Total Construction Cost (Actual)")]);
-    rows.push(["Award of Project Date", getValue("Award of Project Date")]);
-    rows.push(["Year Completed", getValue("Year Completed")]);
+    const rows = [["Key","Value","Value_Number"]];
   
-    // ✅ these 4 become numbers (SF stripped)
-    rows.push(["Site Area", parseSF(getValue("Site Area"))]);
-    rows.push(["GSF: Area of New Construction", parseSF(getValue("GSF: Area of New Construction"))]);
-    rows.push(["GSF: Area of Renovation", parseSF(getValue("GSF: Area of Renovation"))]);
-    rows.push(["GSF: Total Area", parseSF(getValue("GSF: Total Area"))]);
+    // text fields (Value_Number = null)
+    const pn = getValue("Project Name");
+    rows.push(["Project Name", pn, null]);
   
+    const inst = getValue("Institution Name");
+    rows.push(["Institution Name", inst, null]);
+  
+    const pct = getValue("Primary Client Type");
+    rows.push(["Primary Client Type", pct, null]);
+  
+    const pid = getValue("Primary Project ID");
+    rows.push(["Primary Project ID", pid, parseNumberLoose(pid)]);
+  
+    const ct = getValue("Construction Type");
+    rows.push(["Construction Type", ct, null]);
+  
+    // numeric-like fields
+    const tcc = getValue("Total Construction Cost (Actual)");
+    rows.push(["Total Construction Cost (Actual)", tcc, parseNumberLoose(tcc)]);
+  
+    const aopd = getValue("Award of Project Date");
+    rows.push(["Award of Project Date", aopd, null]);
+  
+    const yc = getValue("Year Completed");
+    rows.push(["Year Completed", yc, parseNumberLoose(yc)]);
+  
+    // ✅ areas: numeric + keep Value as the numeric too
+    const siteArea = parseSF(getValue("Site Area"));
+    rows.push(["Site Area", siteArea, siteArea]);
+  
+    const gsfNew = parseSF(getValue("GSF: Area of New Construction"));
+    rows.push(["GSF: Area of New Construction", gsfNew, gsfNew]);
+  
+    const gsfReno = parseSF(getValue("GSF: Area of Renovation"));
+    rows.push(["GSF: Area of Renovation", gsfReno, gsfReno]);
+  
+    const gsfTotal = parseSF(getValue("GSF: Total Area"));
+    rows.push(["GSF: Total Area", gsfTotal, gsfTotal]);
+  
+    // lists: keep as text, Value_Number null
     const labTypes = getList("Lab Types");
-    for (const v of labTypes) rows.push(["Lab Types", v]);
+    for (const v of labTypes) rows.push(["Lab Types", v, null]);
   
     const labUse = getList("Lab Use");
-    for (const v of labUse) rows.push(["Lab Use", v]);
+    for (const v of labUse) rows.push(["Lab Use", v, null]);
   
-    // keep header, drop rows with empty value
+    // keep header, drop blank values
     return rows.filter((r, i) => i === 0 || (r[1] !== null && String(r[1]).trim() !== ""));
   }
 
@@ -937,4 +981,5 @@
 </body>
 
 </html>
+
 
