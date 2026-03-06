@@ -617,11 +617,18 @@
       { label: "Payette Net Labor Fee per Greensheet", match: "payette net labor fee per greensheet" }
     ];
 
-    const grossFeeRows = [["Metric","Value"]];
+    const grossFeeRows = [[
+      "Current Project Gross Fee",
+      "Direct Expense Budget",
+      "Payette Net Labor Fee per Greensheet"
+    ]];
+    
+    const vals = [];
     for (const m of metrics) {
       const r = findRowIndex(aoa, (row) => normalizeLabel(row?.[0]) === m.match);
-      grossFeeRows.push([m.label, r < 0 ? null : lastNumericInRow(aoa[r])]);
+      vals.push(r < 0 ? null : lastNumericInRow(aoa[r]));
     }
+    grossFeeRows.push(vals);
 
     const headerRowIdx = findRowIndex(aoa, (row) =>
       normalizeLabel(row?.[0]) === "type" && row.some(c => normalizeLabel(c) === "totals")
@@ -1054,7 +1061,7 @@
       const outWbAll = buildOutputWorkbook_ALL(projectResults);
     
       // filename: include how many projects
-      const outName = `powerbi_ready_ALL_${projectResults.length}_projects.xlsx`;
+      const outName = `Powerbi_Ready_ALL.xlsx`;
       XLSX.writeFile(outWbAll, outName);
     
     } catch (err) {
@@ -1070,6 +1077,7 @@
 </body>
 
 </html>
+
 
 
 
