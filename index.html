@@ -909,6 +909,36 @@
     }
     return out;
   }
+  
+  function sanitizeSheetPart(s) {
+    const t = String(s ?? "")
+      .replace(/[:\\\/\?\*\[\]]/g, "_") // invalid chars
+      .replace(/\s+/g, " ")
+      .trim();
+    return t || "Project";
+  }
+  
+  function makeSheetName(project, baseName) {
+    const p = sanitizeSheetPart(project);
+    const base = sanitizeSheetPart(baseName);
+  
+    // Excel sheet name max length = 31
+    // We'll format as: "PROJ__Base"
+    const sep = "__";
+    const max = 31;
+  
+    // Reserve space for sep + base
+    const reserved = sep.length + base.length;
+    let pShort = p;
+    if (pShort.length + reserved > max) {
+      pShort = pShort.slice(0, Math.max(1, max - reserved));
+    }
+  
+    let name = `${pShort}${sep}${base}`;
+    if (name.length > max) name = name.slice(0, max);
+  
+    return name;
+  }
 
   function buildOutputWorkbook(project, budgetExtract, laborRows, oerRows, projectDataRows) {
     const wb = XLSX.utils.book_new();
@@ -921,12 +951,13 @@
     const oer = addProjectColumn(oerRows, project);
     const projData = addProjectColumn(projectDataRows, project);
   
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(grossFee), "Gross_Fee");
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(feeByPhase), "Fee_ByPhase");
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(subByPhase), "Subcontractor_ByPhase");
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(labor), "Labor_PhaseTotals");
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(oer), "OER_ProjectLines");
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(projData), "Project_Data");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(grossFee), makeSheetName(project, "Gross_Fee"));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(feeByPhase), makeSheetName(project, "Fee_ByPhase"));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(subByPhase), makeSheetName(project, "Subcontractor_ByPhase"));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(labor), makeSheetName(project, "Labor_PhaseTotals"));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(oer), makeSheetName(project, "OER_ProjectLines"));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(projData), makeSheetName(project, "Project_Data"));
+
   
     wb.Props = wb.Props || {};
     wb.Props.Title = `PowerBI Ready - ${project}`;
@@ -981,5 +1012,6 @@
 </body>
 
 </html>
+
 
 
