@@ -768,39 +768,61 @@
     const preferred = wb.SheetNames.includes("Project_Data") ? "Project_Data" : wb.SheetNames[0];
     const aoa = sheetToAOA(wb, preferred);
     if (!aoa) throw new Error("Project Data: cannot read sheet.");
-
+  
     function findLabelRow(label){
       const target = normalizeLabel(label);
       return findRowIndex(aoa, (row) => normalizeLabel(row?.[0]) === target);
     }
-
+  
     function getValue(label){
       const r = findLabelRow(label);
       if (r < 0) return null;
       return aoa[r]?.[1] ?? null;
     }
-
+  
     function getList(label){
       const r = findLabelRow(label);
       if (r < 0) return [];
       const out = [];
       const first = aoa[r]?.[1];
       if (first != null && String(first).trim() !== "") out.push(first);
-
+  
       for (let i=r+1; i<aoa.length; i++) {
         const k = aoa[i]?.[0];
         const v = aoa[i]?.[1];
-
+  
         const kHas = k != null && String(k).trim() !== "";
         if (kHas) break; // next section begins
-
+  
         if (v != null && String(v).trim() !== "") out.push(v);
       }
       return out;
     }
-
-    // EXACT order as your example output
-    const rows = [];
+  
+    // ✅ convert "12,345 SF" / "12345sf" / "12,345  sf" -> 12345 (number)
+    function parseSF(v){
+      if (v == null) return null;
+      if (typeof v === "number" && isFinite(v)) return v;
+  
+      let s = String(v).trim();
+      if (!s) return null;
+  
+      // remove commas
+      s = s.replace(/,/g, "");
+  
+      // remove trailing unit like " SF" / "sf" (only at the end)
+      s = s.replace(/\s*sf\s*$/i, "");
+  
+      // if there are any other trailing non-numeric chars, strip them cautiously
+      s = s.replace(/[^\d.\-]+$/g, "").trim();
+  
+      const n = Number(s);
+      return Number.isFinite(n) ? n : null;
+    }
+  
+    // ✅ strongly recommended: add a header so Project_Data is a proper table
+    const rows = [["Key","Value"]];
+  
     rows.push(["Project Name", getValue("Project Name")]);
     rows.push(["Institution Name", getValue("Institution Name")]);
     rows.push(["Primary Client Type", getValue("Primary Client Type")]);
@@ -809,19 +831,21 @@
     rows.push(["Total Construction Cost (Actual)", getValue("Total Construction Cost (Actual)")]);
     rows.push(["Award of Project Date", getValue("Award of Project Date")]);
     rows.push(["Year Completed", getValue("Year Completed")]);
-    rows.push(["Site Area", getValue("Site Area")]);
-    rows.push(["GSF: Area of New Construction", getValue("GSF: Area of New Construction")]);
-    rows.push(["GSF: Area of Renovation", getValue("GSF: Area of Renovation")]);
-    rows.push(["GSF: Total Area", getValue("GSF: Total Area")]);
-
+  
+    // ✅ these 4 become numbers (SF stripped)
+    rows.push(["Site Area", parseSF(getValue("Site Area"))]);
+    rows.push(["GSF: Area of New Construction", parseSF(getValue("GSF: Area of New Construction"))]);
+    rows.push(["GSF: Area of Renovation", parseSF(getValue("GSF: Area of Renovation"))]);
+    rows.push(["GSF: Total Area", parseSF(getValue("GSF: Total Area"))]);
+  
     const labTypes = getList("Lab Types");
     for (const v of labTypes) rows.push(["Lab Types", v]);
-
+  
     const labUse = getList("Lab Use");
     for (const v of labUse) rows.push(["Lab Use", v]);
-
-    // Remove null trailing rows if some fields not present
-    return rows.filter(r => r[0] && (r[1] !== null && String(r[1]).trim() !== ""));
+  
+    // keep header, drop rows with empty value
+    return rows.filter((r, i) => i === 0 || (r[1] !== null && String(r[1]).trim() !== ""));
   }
 
   function addProjectColumn(aoa, projectName, colName = "Project") {
@@ -913,3 +937,4 @@
 </body>
 
 </html>
+
