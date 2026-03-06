@@ -963,6 +963,51 @@
     wb.Props.Title = `PowerBI Ready - ${project}`;
     return wb;
   }
+  function buildOutputWorkbook_ALL(projectResults) {
+    // projectResults: Array<{project, budgetExtract, laborRows, oerRows, projectDataRows}>
+    const wb = XLSX.utils.book_new();
+  
+    // Start each sheet with headers that already include Project
+    const Gross_Fee = [["Project","Metric","Value"]];
+    const Fee_ByPhase = [["Project","Type","Phase","Amount"]];
+    const Subcontractor_ByPhase = [["Project","Subcontractor","Phase","Amount"]];
+    const Labor_PhaseTotals = [["Project","ProjectNumber","PhaseClean","TotalHours"]];
+    const OER_ProjectLines = [["Project","Hours","GrossRevenue","ProjectConsExp","NetRev","Labor","OH","ProfitLoss","PctProfit","NetMult","PctEACLabor"]];
+    const Project_Data = [["Project","Key","Value","Value_Number"]];
+  
+    for (const r of projectResults) {
+      const proj = r.project;
+  
+      // These helpers add "Project" header + prepend project per row.
+      // We want to append rows (excluding header) into the ALL arrays.
+  
+      const gf = addProjectColumn(r.budgetExtract.grossFeeRows, proj);              // [Project, Metric, Value]
+      const fbp = addProjectColumn(r.budgetExtract.feeByPhase, proj);              // [Project, Type, Phase, Amount]
+      const sbp = addProjectColumn(r.budgetExtract.subcontractorByPhase, proj);    // [Project, Subcontractor, Phase, Amount]
+      const lab = addProjectColumn(r.laborRows, proj);                             // [Project, ProjectNumber, PhaseClean, TotalHours]
+      const oer = addProjectColumn(r.oerRows, proj);                               // [Project, Hours, GrossRevenue, ...]
+      const pd = addProjectColumn(r.projectDataRows, proj);                        // [Project, Key, Value, Value_Number]
+  
+      // Append rows excluding header row
+      Gross_Fee.push(...gf.slice(1));
+      Fee_ByPhase.push(...fbp.slice(1));
+      Subcontractor_ByPhase.push(...sbp.slice(1));
+      Labor_PhaseTotals.push(...lab.slice(1));
+      OER_ProjectLines.push(...oer.slice(1));
+      Project_Data.push(...pd.slice(1));
+    }
+  
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(Gross_Fee), "Gross_Fee");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(Fee_ByPhase), "Fee_ByPhase");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(Subcontractor_ByPhase), "Subcontractor_ByPhase");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(Labor_PhaseTotals), "Labor_PhaseTotals");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(OER_ProjectLines), "OER_ProjectLines");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(Project_Data), "Project_Data");
+  
+    wb.Props = wb.Props || {};
+    wb.Props.Title = "PowerBI Ready - ALL Projects";
+    return wb;
+  }
 
   // ---------- Generate ----------
   btnGen.addEventListener('click', async () => {
@@ -971,7 +1016,7 @@
 
     try {
       const byProject = groupByProject(files);
-
+    
       const complete = [];
       for (const [proj, set] of byProject.entries()) {
         if (proj === "__INVALID__") continue;
@@ -981,24 +1026,37 @@
         showStatus("No complete project sets found (need Budget + Labor + OER + Project Data).");
         return;
       }
-
+    
+      // ✅ Collect per-project results first
+      const projectResults = [];
+    
       for (const [proj, set] of complete) {
         const wbBudget = await readWorkbook(set.BUDGET);
         const wbLabor  = await readWorkbook(set.LABOR);
         const wbOER    = await readWorkbook(set.OER);
         const wbPD     = await readWorkbook(set.PROJECT_DATA);
-
+    
         const budgetExtract = extractFromBudget(wbBudget);
         const laborRows = extractFromLabor(wbLabor);
         const oerRows = extractFromOER(wbOER);
         const projectDataRows = extractFromProjectData(wbPD);
-
-        const outWb = buildOutputWorkbook(proj, budgetExtract, laborRows, oerRows, projectDataRows);
-
-        const safeProj = proj.replace(/[^\w\-]+/g, "_");
-        XLSX.writeFile(outWb, `${safeProj}_powerbi_ready.xlsx`);
+    
+        projectResults.push({
+          project: proj,
+          budgetExtract,
+          laborRows,
+          oerRows,
+          projectDataRows
+        });
       }
-
+    
+      // ✅ Build ONE workbook that already contains appended "ALL" sheets
+      const outWbAll = buildOutputWorkbook_ALL(projectResults);
+    
+      // filename: include how many projects
+      const outName = `powerbi_ready_ALL_${projectResults.length}_projects.xlsx`;
+      XLSX.writeFile(outWbAll, outName);
+    
     } catch (err) {
       console.error(err);
       showStatus(`ERROR: ${err?.message || String(err)}`);
@@ -1012,6 +1070,7 @@
 </body>
 
 </html>
+
 
 
 
