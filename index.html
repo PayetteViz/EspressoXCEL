@@ -615,8 +615,8 @@
     return Number.isFinite(n) ? n : null;
   }
 
-  function toPctString(n){
-    return Number.isFinite(n) ? `${(n * 100).toFixed(2)}%` : "";
+  function safeDivide(a, b){
+    return (Number.isFinite(a) && Number.isFinite(b) && b !== 0) ? (a / b) : null;
   }
   
   function safeDivide(a, b){
@@ -816,9 +816,9 @@
     const gsfRowIdx = findRowIndex(pdAoa, (r) => normalizeLabel(r?.[0]) === "gsf: total area");
     const gsfTotalArea = gsfRowIdx >= 0 ? parseSF(pdAoa[gsfRowIdx]?.[1]) : null;
   
-    const grossRevenuePct = toPctString(safeDivide(grossRevenue, grossRevenue));
-    const projectConsExpPct = toPctString(safeDivide(projectConsExp, grossRevenue));
-    const netRevPct = toPctString(safeDivide(netRev, grossRevenue));
+    const grossRevenuePct = safeDivide(grossRevenue, grossRevenue);
+    const projectConsExpPct = safeDivide(projectConsExp, grossRevenue);
+    const netRevPct = safeDivide(netRev, grossRevenue);
   
     const grossRevenuePerSF = safeDivide(grossRevenue, gsfTotalArea);
     const projectConsExpPerSF = safeDivide(projectConsExp, gsfTotalArea);
