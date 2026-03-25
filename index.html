@@ -760,7 +760,16 @@
     if (subHeaderIdx < 0) throw new Error("Budget: cannot find subcontractor table header ('Subcontractor Name').");
 
     const subHeader = aoa[subHeaderIdx].map(x => (x == null ? null : String(x).trim()));
-    const SKIP_SUB_PHASES = new Set(["totals", "contingency"]);
+    
+    const SKIP_SUB_PHASES = new Set([
+      "totals",
+      "contingency",
+      "total subcontractor fee",
+      "total subcontractor billed to date",
+      "total subcontractor paid to date",
+      "total subcontractor fee remaining",
+      "total subconstractor fee remaining"
+    ]);
     
     const subPhaseCols = [];
     for (let c = 1; c < subHeader.length; c++) {
@@ -768,9 +777,9 @@
       if (h == null || String(h).trim() === "") continue;
     
       const phaseName = String(h).trim();
-      const key = phaseName.toLowerCase();
+      const key = normalizeLabel(phaseName);
     
-      // ✅ skip Totals / Contingency columns
+      // skip summary columns in subcontractor table
       if (SKIP_SUB_PHASES.has(key)) continue;
     
       subPhaseCols.push({ c, phase: phaseName });
