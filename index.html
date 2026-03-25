@@ -600,6 +600,29 @@
     return null;
   }
 
+  function parseSF(v){
+    if (v == null) return null;
+    if (typeof v === "number" && isFinite(v)) return v;
+  
+    let s = String(v).trim();
+    if (!s) return null;
+  
+    s = s.replace(/,/g, "");
+    s = s.replace(/\s*sf\s*$/i, "");
+    s = s.replace(/[^\d.\-]+$/g, "").trim();
+  
+    const n = Number(s);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  function toPctString(n){
+    return Number.isFinite(n) ? `${(n * 100).toFixed(2)}%` : "";
+  }
+  
+  function safeDivide(a, b){
+    return (Number.isFinite(a) && Number.isFinite(b) && b !== 0) ? (a / b) : null;
+  }
+
   function extractProjectNumber(projectCell){
     const s = String(projectCell ?? '').trim();
     const m = s.match(/^([0-9]+(?:\.[0-9]+)?)\b/);
@@ -749,42 +772,96 @@
     return rows;
   }
 
-  function extractFromOER(wb) {
+  function extractFromOER(wb, wbPD) {
     const sheetName = wb.SheetNames[0];
     const aoa = sheetToAOA(wb, sheetName);
     if (!aoa) throw new Error("OER: cannot read first sheet.");
-
+  
     const grandIdx = findRowIndex(aoa, (row) => normalizeLabel(row?.[0]) === "grand total");
     if (grandIdx < 0) throw new Error('OER: cannot find "Grand Total" row.');
-
+  
     let headerIdx = -1;
     for (let r = grandIdx; r >= Math.max(0, grandIdx - 6); r--) {
       const row = aoa[r] || [];
       const norm = row.map(normalizeLabel);
-      if (norm.includes("hours") && norm.includes("revenue") && norm.includes("labor")) { headerIdx = r; break; }
+      if (norm.includes("hours") && norm.includes("revenue") && norm.includes("labor")) {
+        headerIdx = r;
+        break;
+      }
     }
     if (headerIdx < 0) headerIdx = grandIdx - 1;
-
+  
     const hdr = (aoa[headerIdx] || []).map(x => String(x ?? '').trim());
     const row = aoa[grandIdx] || [];
-
+  
     const idx = (k) => hdr.findIndex(x => normalizeLabel(x) === k);
-    const laborIdxs = hdr.map((x,i)=>[normalizeLabel(x),i]).filter(([n])=>n==="labor").map(([,i])=>i);
-
-    const outHeader = ["Hours","GrossRevenue","ProjectConsExp","NetRev","Labor","OH","ProfitLoss","PctProfit","NetMult","PctEACLabor"];
-    const outRow = [
-      toNumber(row[idx("hours")]) ?? 0,
-      toNumber(row[idx("revenue")]) ?? 0,
-      toNumber(row[idx("cons/exp")]) ?? 0,
-      toNumber(row[idx("rev")]) ?? 0,
-      toNumber(row[idx("labor")]) ?? 0,
-      toNumber(row[idx("oh")]) ?? 0,
-      toNumber(row[idx("loss")]) ?? 0,
-      toNumber(row[idx("profit")]) ?? 0,
-      toNumber(row[idx("mult")]) ?? 0,
-      (laborIdxs.length >= 2 ? (toNumber(row[laborIdxs[1]]) ?? 0) : 0)
+    const laborIdxs = hdr.map((x, i) => [normalizeLabel(x), i]).filter(([n]) => n === "labor").map(([, i]) => i);
+  
+    const hours = toNumber(row[idx("hours")]) ?? 0;
+    const grossRevenue = toNumber(row[idx("revenue")]) ?? 0;
+    const projectConsExp = toNumber(row[idx("cons/exp")]) ?? 0;
+    const netRev = toNumber(row[idx("rev")]) ?? 0;
+    const labor = toNumber(row[idx("labor")]) ?? 0;
+    const oh = toNumber(row[idx("oh")]) ?? 0;
+    const profitLoss = toNumber(row[idx("loss")]) ?? 0;
+    const pctProfit = toNumber(row[idx("profit")]) ?? 0;
+    const netMult = toNumber(row[idx("mult")]) ?? 0;
+    const pctEACLabor = (laborIdxs.length >= 2 ? (toNumber(row[laborIdxs[1]]) ?? 0) : 0);
+  
+    // Read GSF: Total Area from Project Data
+    const pdSheetName = wbPD.SheetNames.includes("Project_Data") ? "Project_Data" : wbPD.SheetNames[0];
+    const pdAoa = sheetToAOA(wbPD, pdSheetName);
+    if (!pdAoa) throw new Error("Project Data: cannot read sheet for GSF.");
+  
+    const gsfRowIdx = findRowIndex(pdAoa, (r) => normalizeLabel(r?.[0]) === "gsf: total area");
+    const gsfTotalArea = gsfRowIdx >= 0 ? parseSF(pdAoa[gsfRowIdx]?.[1]) : null;
+  
+    const grossRevenuePct = toPctString(safeDivide(grossRevenue, grossRevenue));
+    const projectConsExpPct = toPctString(safeDivide(projectConsExp, grossRevenue));
+    const netRevPct = toPctString(safeDivide(netRev, grossRevenue));
+  
+    const grossRevenuePerSF = safeDivide(grossRevenue, gsfTotalArea);
+    const projectConsExpPerSF = safeDivide(projectConsExp, gsfTotalArea);
+    const netRevPerSF = safeDivide(netRev, gsfTotalArea);
+  
+    const outHeader = [
+      "Hours",
+      "GrossRevenue",
+      "ProjectConsExp",
+      "NetRev",
+      "Labor",
+      "OH",
+      "ProfitLoss",
+      "PctProfit",
+      "NetMult",
+      "PctEACLabor",
+      "GrossRevenue%",
+      "ProjectConsExp%",
+      "NetRev%",
+      "GrossRevenue per SF",
+      "ProjectConsExp per SF",
+      "NetRev per SF"
     ];
-
+  
+    const outRow = [
+      hours,
+      grossRevenue,
+      projectConsExp,
+      netRev,
+      labor,
+      oh,
+      profitLoss,
+      pctProfit,
+      netMult,
+      pctEACLabor,
+      grossRevenuePct,
+      projectConsExpPct,
+      netRevPct,
+      grossRevenuePerSF,
+      projectConsExpPerSF,
+      netRevPerSF
+    ];
+  
     return [outHeader, outRow];
   }
 
@@ -822,21 +899,7 @@
       return out;
     }
   
-    // "12,345 SF" -> 12345
-    function parseSF(v){
-      if (v == null) return null;
-      if (typeof v === "number" && isFinite(v)) return v;
-  
-      let s = String(v).trim();
-      if (!s) return null;
-  
-      s = s.replace(/,/g, "");
-      s = s.replace(/\s*sf\s*$/i, "");
-      s = s.replace(/[^\d.\-]+$/g, "").trim();
-  
-      const n = Number(s);
-      return Number.isFinite(n) ? n : null;
-    }
+
   
     // "14,600,000" -> 14600000 ; numbers pass through ; non-numbers -> null
     function formatWithComma(v){
@@ -996,7 +1059,25 @@
     const Fee_ByPhase = [["Project","Type","Phase","Amount"]];
     const Subcontractor_ByPhase = [["Project","Subcontractor","Phase","Amount"]];
     const Labor_PhaseTotals = [["Project","ProjectNumber","PhaseClean","TotalHours"]];
-    const OER_ProjectLines = [["Project","Hours","GrossRevenue","ProjectConsExp","NetRev","Labor","OH","ProfitLoss","PctProfit","NetMult","PctEACLabor"]];
+    const OER_ProjectLines = [[
+      "Project",
+      "Hours",
+      "GrossRevenue",
+      "ProjectConsExp",
+      "NetRev",
+      "Labor",
+      "OH",
+      "ProfitLoss",
+      "PctProfit",
+      "NetMult",
+      "PctEACLabor",
+      "GrossRevenue%",
+      "ProjectConsExp%",
+      "NetRev%",
+      "GrossRevenue per SF",
+      "ProjectConsExp per SF",
+      "NetRev per SF"
+    ]];
     const Project_Data = [["Project","Key","Value"]];
   
     for (const r of projectResults) {
@@ -1062,7 +1143,7 @@
     
         const budgetExtract = extractFromBudget(wbBudget);
         const laborRows = extractFromLabor(wbLabor);
-        const oerRows = extractFromOER(wbOER);
+        const oerRows = extractFromOER(wbOER, wbPD);
         const projectDataRows = extractFromProjectData(wbPD);
     
         projectResults.push({
