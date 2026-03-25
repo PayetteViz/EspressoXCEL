@@ -615,6 +615,80 @@
     return Number.isFinite(n) ? n : null;
   }
 
+  function parseSFValue(x){
+    if (x == null) return null;
+    if (typeof x === "number" && isFinite(x)) return x;
+  
+    let s = String(x).trim();
+    if (!s) return null;
+  
+    s = s.replace(/,/g, "");
+    s = s.replace(/\s*sf\s*$/i, "");
+    s = s.replace(/[^\d.\-]+$/g, "").trim();
+  
+    const n = Number(s);
+    return Number.isFinite(n) ? n : null;
+  }
+  
+  function getCurrentGrossFee(budgetExtract){
+    // grossFeeRows = [
+    //   ["Current Project Gross Fee", "Direct Expense Budget", "Payette Net Labor Fee per Greensheet"],
+    //   [value1, value2, value3]
+    // ]
+    return toNumber(budgetExtract?.grossFeeRows?.[1]?.[0]) ?? null;
+  }
+  
+  function getGSFTotalArea(projectDataRows){
+    // current structure:
+    // ["Key","Value","Value_Number"]
+    // ...
+    // ["GSF: Total Area", 159800, 159800]
+    if (!Array.isArray(projectDataRows)) return null;
+  
+    for (let i = 1; i < projectDataRows.length; i++) {
+      const row = projectDataRows[i] || [];
+      const key = String(row[0] ?? "").trim();
+  
+      if (key === "GSF: Total Area") {
+        // prefer Value_Number if present
+        const vNum = row.length >= 3 ? toNumber(row[2]) : null;
+        if (vNum != null) return vNum;
+  
+        // fallback to Value
+        const v = parseSFValue(row[1]);
+        if (v != null) return v;
+      }
+    }
+    return null;
+  }
+  
+  function augmentFeeByPhaseRows(feeByPhaseRows, grossFee, gsfTotal){
+    const out = [[
+      "Type",
+      "Phase",
+      "Amount",
+      "Amount % of Gross Fee",
+      "Amount per SF"
+    ]];
+  
+    for (let i = 1; i < feeByPhaseRows.length; i++) {
+      const row = feeByPhaseRows[i] || [];
+      const type = row[0];
+      const phase = row[1];
+      const amount = toNumber(row[2]) ?? 0;
+  
+      const pctOfGrossFee =
+        (grossFee != null && grossFee !== 0) ? (amount / grossFee) : null;
+  
+      const amountPerSF =
+        (gsfTotal != null && gsfTotal !== 0) ? (amount / gsfTotal) : null;
+  
+      out.push([type, phase, amount, pctOfGrossFee, amountPerSF]);
+    }
+  
+    return out;
+  }
+
   function safeDivide(a, b){
     return (Number.isFinite(a) && Number.isFinite(b) && b !== 0) ? (a / b) : null;
   }
@@ -1056,7 +1130,14 @@
       "Direct Expense Budget",
       "Payette Net Labor Fee per Greensheet"
     ]];
-    const Fee_ByPhase = [["Project","Type","Phase","Amount"]];
+    const Fee_ByPhase = [[
+      "Project",
+      "Type",
+      "Phase",
+      "Amount",
+      "Amount % of Gross Fee",
+      "Amount per SF"
+    ]];
     const Subcontractor_ByPhase = [["Project","Subcontractor","Phase","Amount"]];
     const Labor_PhaseTotals = [["Project","ProjectNumber","PhaseClean","TotalHours"]];
     const OER_ProjectLines = [[
@@ -1086,12 +1167,21 @@
       // These helpers add "Project" header + prepend project per row.
       // We want to append rows (excluding header) into the ALL arrays.
   
-      const gf = addProjectColumn(r.budgetExtract.grossFeeRows, proj);              // [Project, Metric, Value]
-      const fbp = addProjectColumn(r.budgetExtract.feeByPhase, proj);              // [Project, Type, Phase, Amount]
-      const sbp = addProjectColumn(r.budgetExtract.subcontractorByPhase, proj);    // [Project, Subcontractor, Phase, Amount]
-      const lab = addProjectColumn(r.laborRows, proj);                             // [Project, ProjectNumber, PhaseClean, TotalHours]
-      const oer = addProjectColumn(r.oerRows, proj);                               // [Project, Hours, GrossRevenue, ...]
-      const pd = addProjectColumn(r.projectDataRows, proj);                        // [Project, Key, Value, Value_Number]
+      const grossFeeValue = getCurrentGrossFee(r.budgetExtract);
+      const gsfTotalArea = getGSFTotalArea(r.projectDataRows);
+      
+      const feeByPhaseAug = augmentFeeByPhaseRows(
+        r.budgetExtract.feeByPhase,
+        grossFeeValue,
+        gsfTotalArea
+      );
+      
+      const gf = addProjectColumn(r.budgetExtract.grossFeeRows, proj);
+      const fbp = addProjectColumn(feeByPhaseAug, proj);
+      const sbp = addProjectColumn(r.budgetExtract.subcontractorByPhase, proj);
+      const lab = addProjectColumn(r.laborRows, proj);
+      const oer = addProjectColumn(r.oerRows, proj);
+      const pd = addProjectColumn(r.projectDataRows, proj);// [Project, Key, Value, Value_Number]
   
       // Append rows excluding header row
       Gross_Fee.push(...gf.slice(1));
