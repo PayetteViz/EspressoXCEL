@@ -777,19 +777,31 @@
     }
 
     const subcontractorByPhase = [["Subcontractor","Phase","Amount"]];
-    for (let r=subHeaderIdx+1; r<aoa.length; r++) {
+    const SKIP_SUBCONTRACTOR_ROWS = new Set([
+      "total subcontractor fee",
+      "total subcontractor billed to date",
+      "total subconstractor fee remaining",
+      "total subcontractor paid to date"
+    ]);
+    
+    for (let r = subHeaderIdx + 1; r < aoa.length; r++) {
       const name = String(aoa[r]?.[0] ?? "").trim();
       if (!name) continue;
       if (/^legend\b/i.test(name)) break;
-
+    
+      const normName = normalizeLabel(name);
+      if (SKIP_SUBCONTRACTOR_ROWS.has(normName)) continue;
+    
       let anyNum = false;
       for (const pc of subPhaseCols) {
         const n = toNumber(aoa[r][pc.c]);
         if (n != null) { anyNum = true; break; }
       }
       if (!anyNum) continue;
-
-      for (const pc of subPhaseCols) subcontractorByPhase.push([name, pc.phase, toNumber(aoa[r][pc.c]) ?? 0]);
+    
+      for (const pc of subPhaseCols) {
+        subcontractorByPhase.push([name, pc.phase, toNumber(aoa[r][pc.c]) ?? 0]);
+      }
     }
 
     return { grossFeeRows, feeByPhase, subcontractorByPhase };
