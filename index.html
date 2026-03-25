@@ -839,63 +839,75 @@
     }
   
     // "14,600,000" -> 14600000 ; numbers pass through ; non-numbers -> null
-    function parseNumberLoose(v){
-      if (v == null) return null;
-      if (typeof v === "number" && isFinite(v)) return v;
-      const s = String(v).replace(/,/g, "").trim();
-      const n = Number(s);
-      return Number.isFinite(n) ? n : null;
+    function formatWithComma(v){
+      const n = parseSF(v);
+      if (n == null) return v == null ? null : String(v).trim();
+      return n.toLocaleString("en-US");
+    }
+    
+    function formatCurrency(v){
+      const n = parseSF(v);
+      if (n == null) return v == null ? null : String(v).trim();
+      return "$" + n.toLocaleString("en-US");
     }
   
-    const rows = [["Key","Value","Value_Number"]];
-  
-    // text fields (Value_Number = null)
+    const rows = [["Key","Value"]];
+    
+    // text fields
     const pn = getValue("Project Name");
-    rows.push(["Project Name", pn, null]);
-  
+    rows.push(["Project Name", pn]);
+    
     const inst = getValue("Institution Name");
-    rows.push(["Institution Name", inst, null]);
-  
+    rows.push(["Institution Name", inst]);
+    
     const pct = getValue("Primary Client Type");
-    rows.push(["Primary Client Type", pct, null]);
-  
+    rows.push(["Primary Client Type", pct]);
+    
+    // 3) Primary Project ID -> Project #, keep as text, no comma
     const pid = getValue("Primary Project ID");
-    rows.push(["Primary Project ID", pid, parseNumberLoose(pid)]);
-  
+    rows.push(["Project #", pid == null ? null : String(pid).trim()]);
+    
     const ct = getValue("Construction Type");
-    rows.push(["Construction Type", ct, null]);
-  
-    // numeric-like fields
+    rows.push(["Construction Type", ct]);
+    
+    // 4) Total Construction Cost (Actual) -> add $ and comma
     const tcc = getValue("Total Construction Cost (Actual)");
-    rows.push(["Total Construction Cost (Actual)", tcc, parseNumberLoose(tcc)]);
-  
+    rows.push(["Total Construction Cost (Actual)", formatCurrency(tcc)]);
+    
     const aopd = getValue("Award of Project Date");
-    rows.push(["Award of Project Date", aopd, null]);
-  
+    rows.push(["Award of Project Date", aopd]);
+    
     const yc = getValue("Year Completed");
-    rows.push(["Year Completed", yc, parseNumberLoose(yc)]);
-  
-    // ✅ areas: numeric + keep Value as the numeric too
-    const siteArea = parseSF(getValue("Site Area"));
-    rows.push(["Site Area", siteArea, siteArea]);
-  
-    const gsfNew = parseSF(getValue("GSF: Area of New Construction"));
-    rows.push(["GSF: Area of New Construction", gsfNew, gsfNew]);
-  
-    const gsfReno = parseSF(getValue("GSF: Area of Renovation"));
-    rows.push(["GSF: Area of Renovation", gsfReno, gsfReno]);
-  
-    const gsfTotal = parseSF(getValue("GSF: Total Area"));
-    rows.push(["GSF: Total Area", gsfTotal, gsfTotal]);
-  
-    // lists: keep as text, Value_Number null
+    rows.push(["Year Completed", yc == null ? null : String(yc).trim()]);
+    
+    // 2) Site Area / GSF: Total Area / GSF: Area of Renovation -> comma + sf
+    const siteArea = getValue("Site Area");
+    rows.push([
+      "Site Area",
+      parseSF(siteArea) == null ? siteArea : `${formatWithComma(siteArea)} sf`
+    ]);
+    
+    // 1) DELETE GSF: Area of New Construction -> do not push it at all
+    
+    const gsfReno = getValue("GSF: Area of Renovation");
+    rows.push([
+      "GSF: Area of Renovation",
+      parseSF(gsfReno) == null ? gsfReno : `${formatWithComma(gsfReno)} sf`
+    ]);
+    
+    const gsfTotal = getValue("GSF: Total Area");
+    rows.push([
+      "GSF: Total Area",
+      parseSF(gsfTotal) == null ? gsfTotal : `${formatWithComma(gsfTotal)} sf`
+    ]);
+    
+    // lists
     const labTypes = getList("Lab Types");
-    for (const v of labTypes) rows.push(["Lab Types", v, null]);
-  
+    for (const v of labTypes) rows.push(["Lab Types", v]);
+    
     const labUse = getList("Lab Use");
-    for (const v of labUse) rows.push(["Lab Use", v, null]);
-  
-    // keep header, drop blank values
+    for (const v of labUse) rows.push(["Lab Use", v]);
+    
     return rows.filter((r, i) => i === 0 || (r[1] !== null && String(r[1]).trim() !== ""));
   }
 
@@ -985,7 +997,7 @@
     const Subcontractor_ByPhase = [["Project","Subcontractor","Phase","Amount"]];
     const Labor_PhaseTotals = [["Project","ProjectNumber","PhaseClean","TotalHours"]];
     const OER_ProjectLines = [["Project","Hours","GrossRevenue","ProjectConsExp","NetRev","Labor","OH","ProfitLoss","PctProfit","NetMult","PctEACLabor"]];
-    const Project_Data = [["Project","Key","Value","Value_Number"]];
+    const Project_Data = [["Project","Key","Value"]];
   
     for (const r of projectResults) {
       const proj = r.project;
