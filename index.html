@@ -777,10 +777,12 @@
     }
 
     const subcontractorByPhase = [["Subcontractor","Phase","Amount"]];
+    
     const SKIP_SUBCONTRACTOR_ROWS = new Set([
       "total subcontractor fee",
       "total subcontractor billed to date",
       "total subconstractor fee remaining",
+      "total subcontractor fee remaining",
       "total subcontractor paid to date"
     ]);
     
@@ -790,12 +792,17 @@
       if (/^legend\b/i.test(name)) break;
     
       const normName = normalizeLabel(name);
+    
+      // skip total-summary rows
       if (SKIP_SUBCONTRACTOR_ROWS.has(normName)) continue;
     
       let anyNum = false;
       for (const pc of subPhaseCols) {
         const n = toNumber(aoa[r][pc.c]);
-        if (n != null) { anyNum = true; break; }
+        if (n != null) {
+          anyNum = true;
+          break;
+        }
       }
       if (!anyNum) continue;
     
