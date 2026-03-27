@@ -629,6 +629,9 @@
     const n = Number(s);
     return Number.isFinite(n) ? n : null;
   }
+  function getCurrentGrossFee(budgetExtract){
+    return toNumber(budgetExtract?.grossFeeRows?.[1]?.[0]) ?? null;
+  }
   
   function getGrossRevenueFromOERRows(oerRows){
     if (!Array.isArray(oerRows) || oerRows.length < 2) return null;
@@ -1243,12 +1246,10 @@
     for (const r of projectResults) {
       const proj = r.project;
   
-      const grossFeeValue = getCurrentGrossFee(r.budgetExtract);
       const gsfTotalArea = getGSFTotalArea(r.projectDataRows);
-  
+      
       const feeByPhaseAug = augmentFeeByPhaseRows(
         r.budgetExtract.feeByPhase,
-        grossFeeValue,
         gsfTotalArea
       );
   
