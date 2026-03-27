@@ -630,13 +630,7 @@
     return Number.isFinite(n) ? n : null;
   }
   
-  function getCurrentGrossFee(budgetExtract){
-    // grossFeeRows = [
-    //   ["Current Project Gross Fee", "Direct Expense Budget", "Payette Net Labor Fee per Greensheet"],
-    //   [value1, value2, value3]
-    // ]
-    return toNumber(budgetExtract?.grossFeeRows?.[1]?.[0]) ?? null;
-  }
+
   
   function getGSFTotalArea(projectDataRows){
     // current structure:
@@ -662,7 +656,7 @@
     return null;
   }
   
-  function augmentFeeByPhaseRows(feeByPhaseRows, grossFee, gsfTotal){
+  function augmentFeeByPhaseRows(feeByPhaseRows, gsfTotal){
     const out = [[
       "Type",
       "Phase",
@@ -671,6 +665,18 @@
       "Amount per SF"
     ]];
   
+    // denominator = sum of all Total Gross Fees rows for this project
+    let totalGrossFeesSum = 0;
+    for (let i = 1; i < feeByPhaseRows.length; i++) {
+      const row = feeByPhaseRows[i] || [];
+      const type = String(row[0] ?? "").trim();
+      const amount = toNumber(row[2]) ?? 0;
+  
+      if (type === "Total Gross Fees") {
+        totalGrossFeesSum += amount;
+      }
+    }
+  
     for (let i = 1; i < feeByPhaseRows.length; i++) {
       const row = feeByPhaseRows[i] || [];
       const type = row[0];
@@ -678,7 +684,7 @@
       const amount = toNumber(row[2]) ?? 0;
   
       const pctOfGrossFee =
-        (grossFee != null && grossFee !== 0) ? (amount / grossFee) : null;
+        (totalGrossFeesSum !== 0) ? (amount / totalGrossFeesSum) : null;
   
       const amountPerSF =
         (gsfTotal != null && gsfTotal !== 0) ? (amount / gsfTotal) : null;
@@ -750,10 +756,12 @@
     }
 
     const feeByPhase = [["Type","Phase","Amount"]];
-    for (const t of ["Total Gross Fees","Subcontractor Fees"]) {
-      const r = findRowIndex(aoa, (row) => String(row?.[0] ?? "").trim() === t);
-      if (r < 0) continue;
-      for (const pc of phaseCols) feeByPhase.push([t, pc.phase, toNumber(aoa[r][pc.c]) ?? 0]);
+    const t = "Total Gross Fees";
+    const r = findRowIndex(aoa, (row) => String(row?.[0] ?? "").trim() === t);
+    if (r >= 0) {
+      for (const pc of phaseCols) {
+        feeByPhase.push([t, pc.phase, toNumber(aoa[r][pc.c]) ?? 0]);
+      }
     }
 
     const subHeaderIdx = findRowIndex(aoa, (row) => normalizeLabel(row?.[0]) === "subcontractor name");
@@ -1195,12 +1203,10 @@
       // These helpers add "Project" header + prepend project per row.
       // We want to append rows (excluding header) into the ALL arrays.
   
-      const grossFeeValue = getCurrentGrossFee(r.budgetExtract);
       const gsfTotalArea = getGSFTotalArea(r.projectDataRows);
       
       const feeByPhaseAug = augmentFeeByPhaseRows(
         r.budgetExtract.feeByPhase,
-        grossFeeValue,
         gsfTotalArea
       );
       
