@@ -630,7 +630,40 @@
     return Number.isFinite(n) ? n : null;
   }
   
-
+  function getGrossRevenueFromOERRows(oerRows){
+    if (!Array.isArray(oerRows) || oerRows.length < 2) return null;
+  
+    const header = oerRows[0] || [];
+    const row = oerRows[1] || [];
+  
+    const idx = header.findIndex(h => String(h ?? "").trim() === "GrossRevenue");
+    if (idx < 0) return null;
+  
+    return toNumber(row[idx]) ?? null;
+  }
+  
+  function buildAdditionalServicesRow(project, budgetExtract, oerRows){
+    const grossRevenueOER = getGrossRevenueFromOERRows(oerRows);
+    const currentProjectGrossFee = getCurrentGrossFee(budgetExtract);
+  
+    const asr =
+      (grossRevenueOER != null && currentProjectGrossFee != null)
+        ? (grossRevenueOER - currentProjectGrossFee)
+        : null;
+  
+    const asrPct =
+      (asr != null && currentProjectGrossFee != null && currentProjectGrossFee !== 0)
+        ? (asr / currentProjectGrossFee)
+        : null;
+  
+    return [
+      project,
+      grossRevenueOER,
+      currentProjectGrossFee,
+      asr,
+      asrPct
+    ];
+  }
   
   function getGSFTotalArea(projectDataRows){
     // current structure:
